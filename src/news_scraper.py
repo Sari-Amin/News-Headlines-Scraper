@@ -2,39 +2,51 @@ from bs4 import BeautifulSoup
 import requests
 import pandas as pd
 
-
 data = []
-
-sitemap = "https://www.bbc.com/sitemaps/https-index-com-news.xml"
 
 url = "https://www.bbc.com/news"
 
-sitemap_reponse = requests.get(sitemap)
+try:
+    response = requests.get(url)
+    response.raise_for_status()
+except requests.exceptions.RequestException as e:
+    print(f"An error occurred: {e}")
+    exit(1)
 
-soup = BeautifulSoup(sitemap_reponse.content, "xml")
+soup = BeautifulSoup(response.content, "html.parser")
 
-sitemaps = soup.find_all("loc")
+article = soup.find("article")
 
+if article:
+    news = article.find_all("a", class_ = "sc-2e6baa30-0 gILusN")
 
-for sitemap in sitemaps:
-    url = sitemap.text
-    reponse = requests.get(url)
+    for new in news:
+        newsUrl = new.get("href")
 
-    soup = BeautifulSoup(reponse.content, "xml")
-    
-    for news in soup.find_all("url"):
-        
-        news_url = news.find("loc").text
-        news_name = news.find("news:name").text
-        news_headline = news.find("news:title").text  
-        news_summary = ""
-        news_row = {
-            "Name": news_name,
-            "Headline": news_headline,
-            "Summary": news_summary,
-            "URL": news_url
-        }
-        data.append(news_row)
+        if newsUrl.startswith("/"):
+            newsUrl = "https://www.bbc.com" + newsUrl
+
+            newsHeadline = new.get_text()
+
+            try:
+                newsResponse = requests.get(newsUrl)
+                newsResponse.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred while fetching {newsUrl}: {e}")
+                continue
+
+            newsSoup = BeautifulSoup(newsResponse.content, "html.parser")
+            newsSummary = newsSoup.find('meta', {"name": "description"})
+
+            newsSummary = newsSummary["content"] if newsSummary else "No summary available."
+
+            newRow = {
+                "Headline" : newsHeadline,
+                "Summary" : newsSummary,
+                "Url" : newsUrl
+            }
+
+            data.append(newRow)
 
 data = pd.DataFrame(data)
 
